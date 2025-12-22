@@ -6,5 +6,8 @@ build/
 .qtc_clangd/
 *.qmlc
 *.jsc
+*.sqlite3
+*.db
+*.log
 .DS_Store
 Thumbs.db

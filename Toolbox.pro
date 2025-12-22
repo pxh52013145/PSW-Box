@@ -1,6 +1,4 @@
-QT       += core gui
-
-greaterThan(QT_MAJOR_VERSION, 4): QT += widgets
+QT       += core gui widgets network sql
 
 CONFIG += c++17
 
@@ -9,14 +7,28 @@ CONFIG += c++17
 #DEFINES += QT_DISABLE_DEPRECATED_BEFORE=0x060000    # disables all the APIs deprecated before Qt 6.0.0
 
 SOURCES += \
-    main.cpp \
-    mainwindow.cpp
+    src/main.cpp \
+    src/mainwindow.cpp \
+    src/pages/translatorpage.cpp \
+    src/translate/mocktranslateprovider.cpp \
+    src/translate/mymemorytranslateprovider.cpp \
+    src/translate/translateservice.cpp \
+    src/translate/translationhistorymodel.cpp \
+    src/core/apppaths.cpp \
+    src/core/database.cpp \
+    src/core/logging.cpp
 
 HEADERS += \
-    mainwindow.h
-
-FORMS += \
-    mainwindow.ui
+    src/mainwindow.h \
+    src/pages/translatorpage.h \
+    src/translate/translateprovider.h \
+    src/translate/mocktranslateprovider.h \
+    src/translate/mymemorytranslateprovider.h \
+    src/translate/translateservice.h \
+    src/translate/translationhistorymodel.h \
+    src/core/apppaths.h \
+    src/core/database.h \
+    src/core/logging.h
 
 # Default rules for deployment.
 qnx: target.path = /tmp/$${TARGET}/bin
