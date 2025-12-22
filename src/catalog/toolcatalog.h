@@ -43,6 +43,7 @@ public:
     static const CatalogItem *root();
 
 private:
+    static ToolCatalog &instance();
     ToolCatalog();
     CatalogItem *createItem(const QString &id, const QString &name, CatalogItemType type, IconKind icon);
     const CatalogItem *root_ = nullptr;
