@@ -19,7 +19,8 @@ SOURCES += \
     src/translate/translationhistorymodel.cpp \
     src/core/apppaths.cpp \
     src/core/database.cpp \
-    src/core/logging.cpp
+    src/core/logging.cpp \
+    src/core/crypto.cpp
 
 HEADERS += \
     src/mainwindow.h \
@@ -31,7 +32,8 @@ HEADERS += \
     src/translate/translationhistorymodel.h \
     src/core/apppaths.h \
     src/core/database.h \
-    src/core/logging.h
+    src/core/logging.h \
+    src/core/crypto.h
 
 # Default rules for deployment.
 qnx: target.path = /tmp/$${TARGET}/bin
