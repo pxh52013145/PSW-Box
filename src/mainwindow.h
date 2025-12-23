@@ -6,6 +6,7 @@
 class QSystemTrayIcon;
 
 class TranslatorPage;
+class PasswordManagerPage;
 
 class MainWindow final : public QMainWindow
 {
@@ -25,6 +26,7 @@ private:
 
     QSystemTrayIcon *trayIcon_ = nullptr;
     TranslatorPage *translatorPage_ = nullptr;
+    PasswordManagerPage *passwordManagerPage_ = nullptr;
     bool trayEnabled_ = true;
 };
 

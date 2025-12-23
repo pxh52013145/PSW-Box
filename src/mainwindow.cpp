@@ -2,6 +2,7 @@
 
 #include "core/database.h"
 #include "core/logging.h"
+#include "pages/passwordmanagerpage.h"
 #include "pages/translatorpage.h"
 
 #include <QAction>
@@ -51,8 +52,8 @@ void MainWindow::setupUi()
     translatorPage_ = new TranslatorPage(tabs);
     tabs->addTab(translatorPage_, "翻译");
 
-    auto *placeholder = new QWidget(tabs);
-    tabs->addTab(placeholder, "密码（开发中）");
+    passwordManagerPage_ = new PasswordManagerPage(tabs);
+    tabs->addTab(passwordManagerPage_, "密码");
 }
 
 void MainWindow::setupTray()

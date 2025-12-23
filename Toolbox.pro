@@ -23,7 +23,9 @@ SOURCES += \
     src/core/crypto.cpp \
     src/password/passwordvault.cpp \
     src/password/passwordrepository.cpp \
-    src/password/passwordentrymodel.cpp
+    src/password/passwordentrymodel.cpp \
+    src/pages/passwordmanagerpage.cpp \
+    src/pages/passwordentrydialog.cpp
 
 HEADERS += \
     src/mainwindow.h \
@@ -40,7 +42,9 @@ HEADERS += \
     src/password/passwordvault.h \
     src/password/passwordentry.h \
     src/password/passwordrepository.h \
-    src/password/passwordentrymodel.h
+    src/password/passwordentrymodel.h \
+    src/pages/passwordmanagerpage.h \
+    src/pages/passwordentrydialog.h
 
 # Default rules for deployment.
 qnx: target.path = /tmp/$${TARGET}/bin
