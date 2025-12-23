@@ -20,7 +20,10 @@ SOURCES += \
     src/core/apppaths.cpp \
     src/core/database.cpp \
     src/core/logging.cpp \
-    src/core/crypto.cpp
+    src/core/crypto.cpp \
+    src/password/passwordvault.cpp \
+    src/password/passwordrepository.cpp \
+    src/password/passwordentrymodel.cpp
 
 HEADERS += \
     src/mainwindow.h \
@@ -33,7 +36,11 @@ HEADERS += \
     src/core/apppaths.h \
     src/core/database.h \
     src/core/logging.h \
-    src/core/crypto.h
+    src/core/crypto.h \
+    src/password/passwordvault.h \
+    src/password/passwordentry.h \
+    src/password/passwordrepository.h \
+    src/password/passwordentrymodel.h
 
 # Default rules for deployment.
 qnx: target.path = /tmp/$${TARGET}/bin
