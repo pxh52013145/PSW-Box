@@ -1,42 +1,35 @@
 #include "passwordentrydialog.h"
 
+#include "passwordgeneratordialog.h"
+
+#include "password/passwordstrength.h"
+
+#include <QAbstractItemView>
 #include <QComboBox>
 #include <QDialogButtonBox>
 #include <QFormLayout>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
+#include <QListWidget>
 #include <QPlainTextEdit>
+#include <QProgressBar>
 #include <QPushButton>
-#include <QRandomGenerator>
 #include <QToolButton>
 #include <QVBoxLayout>
 
-namespace {
-
-QString makeRandomPassword(int length)
+PasswordEntryDialog::PasswordEntryDialog(const QStringList &categories, const QStringList &availableTags, QWidget *parent)
+    : QDialog(parent)
 {
-    static const QString chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%^&*()-_=+[]{};:,.?";
-    QString out;
-    out.reserve(length);
-    auto *rng = QRandomGenerator::system();
-    for (int i = 0; i < length; ++i)
-        out.append(chars.at(static_cast<int>(rng->generate() % static_cast<quint32>(chars.size()))));
-    return out;
-}
-
-} // namespace
-
-PasswordEntryDialog::PasswordEntryDialog(const QStringList &categories, QWidget *parent) : QDialog(parent)
-{
-    setupUi(categories);
+    setupUi(categories, availableTags);
     updateOkButtonState();
+    updateStrengthIndicator();
 }
 
-void PasswordEntryDialog::setupUi(const QStringList &categories)
+void PasswordEntryDialog::setupUi(const QStringList &categories, const QStringList &availableTags)
 {
     setWindowTitle("密码条目");
-    resize(520, 360);
+    resize(560, 420);
 
     auto *root = new QVBoxLayout(this);
 
@@ -69,6 +62,19 @@ void PasswordEntryDialog::setupUi(const QStringList &categories)
     pwdContainer->setLayout(pwdRow);
     form->addRow("密码：", pwdContainer);
 
+    auto *strengthRow = new QHBoxLayout();
+    strengthBar_ = new QProgressBar(this);
+    strengthBar_->setRange(0, 100);
+    strengthBar_->setTextVisible(false);
+    strengthRow->addWidget(strengthBar_, 1);
+
+    strengthLabel_ = new QLabel(this);
+    strengthRow->addWidget(strengthLabel_);
+
+    auto *strengthContainer = new QWidget(this);
+    strengthContainer->setLayout(strengthRow);
+    form->addRow("强度：", strengthContainer);
+
     urlEdit_ = new QLineEdit(this);
     urlEdit_->setPlaceholderText("https://example.com");
     form->addRow("网址：", urlEdit_);
@@ -78,6 +84,33 @@ void PasswordEntryDialog::setupUi(const QStringList &categories)
     categoryCombo_->addItem("");
     categoryCombo_->addItems(categories);
     form->addRow("分类：", categoryCombo_);
+
+    auto *tagsContainer = new QWidget(this);
+    auto *tagsLayout = new QVBoxLayout(tagsContainer);
+    tagsLayout->setContentsMargins(0, 0, 0, 0);
+
+    tagsList_ = new QListWidget(tagsContainer);
+    tagsList_->setSelectionMode(QAbstractItemView::NoSelection);
+    tagsList_->setMaximumHeight(96);
+    for (const auto &tag : availableTags) {
+        const auto trimmed = tag.trimmed();
+        if (trimmed.isEmpty())
+            continue;
+        auto *item = new QListWidgetItem(trimmed, tagsList_);
+        item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
+        item->setCheckState(Qt::Unchecked);
+    }
+    tagsLayout->addWidget(tagsList_);
+
+    auto *tagAddRow = new QHBoxLayout();
+    newTagEdit_ = new QLineEdit(tagsContainer);
+    newTagEdit_->setPlaceholderText("添加标签（回车）");
+    tagAddRow->addWidget(newTagEdit_, 1);
+    tagAddBtn_ = new QToolButton(tagsContainer);
+    tagAddBtn_->setText("添加");
+    tagAddRow->addWidget(tagAddBtn_);
+    tagsLayout->addLayout(tagAddRow);
+    form->addRow("标签：", tagsContainer);
 
     notesEdit_ = new QPlainTextEdit(this);
     notesEdit_->setPlaceholderText("备注（可选）");
@@ -97,6 +130,7 @@ void PasswordEntryDialog::setupUi(const QStringList &categories)
         data_.password = passwordEdit_->text();
         data_.entry.url = urlEdit_->text().trimmed();
         data_.entry.category = categoryCombo_->currentText().trimmed();
+        data_.entry.tags = selectedTags();
         data_.notes = notesEdit_->toPlainText();
         accept();
     });
@@ -104,9 +138,13 @@ void PasswordEntryDialog::setupUi(const QStringList &categories)
 
     connect(titleEdit_, &QLineEdit::textChanged, this, &PasswordEntryDialog::updateOkButtonState);
     connect(passwordEdit_, &QLineEdit::textChanged, this, &PasswordEntryDialog::updateOkButtonState);
+    connect(passwordEdit_, &QLineEdit::textChanged, this, &PasswordEntryDialog::updateStrengthIndicator);
 
     connect(passwordToggleBtn_, &QToolButton::clicked, this, &PasswordEntryDialog::togglePasswordVisibility);
     connect(passwordGenBtn_, &QToolButton::clicked, this, &PasswordEntryDialog::generatePassword);
+
+    connect(tagAddBtn_, &QToolButton::clicked, this, &PasswordEntryDialog::addTagFromEdit);
+    connect(newTagEdit_, &QLineEdit::returnPressed, this, &PasswordEntryDialog::addTagFromEdit);
 }
 
 void PasswordEntryDialog::updateOkButtonState()
@@ -114,6 +152,17 @@ void PasswordEntryDialog::updateOkButtonState()
     const auto titleOk = !titleEdit_->text().trimmed().isEmpty();
     const auto passwordOk = !passwordEdit_->text().isEmpty();
     buttonBox_->button(QDialogButtonBox::Ok)->setEnabled(titleOk && passwordOk);
+}
+
+void PasswordEntryDialog::updateStrengthIndicator()
+{
+    if (!strengthBar_ || !strengthLabel_)
+        return;
+
+    const auto pwd = passwordEdit_ ? passwordEdit_->text() : QString();
+    const auto strength = evaluatePasswordStrength(pwd);
+    strengthBar_->setValue(strength.score);
+    strengthLabel_->setText(QString("%1(%2)").arg(strength.label).arg(strength.score));
 }
 
 void PasswordEntryDialog::togglePasswordVisibility()
@@ -125,7 +174,52 @@ void PasswordEntryDialog::togglePasswordVisibility()
 
 void PasswordEntryDialog::generatePassword()
 {
-    passwordEdit_->setText(makeRandomPassword(16));
+    PasswordGeneratorDialog dlg(this);
+    if (dlg.exec() != QDialog::Accepted)
+        return;
+
+    const auto pwd = dlg.password();
+    if (!pwd.isEmpty())
+        passwordEdit_->setText(pwd);
+}
+
+void PasswordEntryDialog::addTagFromEdit()
+{
+    if (!tagsList_ || !newTagEdit_)
+        return;
+
+    const auto tag = newTagEdit_->text().trimmed();
+    if (tag.isEmpty())
+        return;
+
+    for (int i = 0; i < tagsList_->count(); ++i) {
+        auto *item = tagsList_->item(i);
+        if (item && item->text().compare(tag, Qt::CaseInsensitive) == 0) {
+            item->setCheckState(Qt::Checked);
+            newTagEdit_->clear();
+            return;
+        }
+    }
+
+    auto *item = new QListWidgetItem(tag, tagsList_);
+    item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
+    item->setCheckState(Qt::Checked);
+    newTagEdit_->clear();
+}
+
+QStringList PasswordEntryDialog::selectedTags() const
+{
+    QStringList tags;
+    if (!tagsList_)
+        return tags;
+
+    for (int i = 0; i < tagsList_->count(); ++i) {
+        const auto *item = tagsList_->item(i);
+        if (item && item->checkState() == Qt::Checked)
+            tags.push_back(item->text());
+    }
+
+    return tags;
 }
 
 void PasswordEntryDialog::setEntry(const PasswordEntrySecrets &secrets)
@@ -145,12 +239,38 @@ void PasswordEntryDialog::setEntry(const PasswordEntrySecrets &secrets)
         categoryCombo_->setCurrentText(category);
     }
 
+    if (tagsList_) {
+        for (int i = 0; i < tagsList_->count(); ++i) {
+            auto *item = tagsList_->item(i);
+            if (!item)
+                continue;
+            const auto checked = secrets.entry.tags.contains(item->text(), Qt::CaseInsensitive);
+            item->setCheckState(checked ? Qt::Checked : Qt::Unchecked);
+        }
+
+        for (const auto &tag : secrets.entry.tags) {
+            bool found = false;
+            for (int i = 0; i < tagsList_->count(); ++i) {
+                const auto *item = tagsList_->item(i);
+                if (item && item->text().compare(tag, Qt::CaseInsensitive) == 0) {
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                auto *item = new QListWidgetItem(tag, tagsList_);
+                item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
+                item->setCheckState(Qt::Checked);
+            }
+        }
+    }
+
     notesEdit_->setPlainText(secrets.notes);
     updateOkButtonState();
+    updateStrengthIndicator();
 }
 
 PasswordEntrySecrets PasswordEntryDialog::entry() const
 {
     return data_;
 }
-
