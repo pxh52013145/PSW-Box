@@ -1,6 +1,6 @@
 ﻿#include "translationhistorymodel.h"
 
-#include "core/database.h"
+#include "translatedatabase.h"
 
 #include <QSqlQuery>
 
@@ -79,7 +79,7 @@ void TranslationHistoryModel::reload()
     beginResetModel();
     items_.clear();
 
-    auto database = Database::db();
+    auto database = TranslateDatabase::db();
     if (!database.isOpen()) {
         endResetModel();
         return;
@@ -113,7 +113,7 @@ void TranslationHistoryModel::reload()
 
 void TranslationHistoryModel::addEntry(const TranslationHistoryItem &item)
 {
-    auto database = Database::db();
+    auto database = TranslateDatabase::db();
     if (!database.isOpen())
         return;
 
@@ -141,4 +141,3 @@ TranslationHistoryItem TranslationHistoryModel::itemAt(int row) const
         return {};
     return items_[row];
 }
-
