@@ -3,6 +3,7 @@ build/
 *.user
 *.user.*
 *.autosave
+.qtcreator/
 .qtc_clangd/
 *.qmlc
 *.jsc
@@ -10,5 +11,6 @@ build/
 *.db
 *.log
 reference/.env.local
+reference/keepassxc/
 .DS_Store
 Thumbs.db
