@@ -49,43 +49,72 @@ public:
         }
 
         const auto host = PasswordUrl::hostFromUrl(pageUrl);
-        if (host.isEmpty()) {
-            QMessageBox::warning(uiParent_, "失败", "无法解析当前网页域名。");
-            return;
-        }
 
         QVector<PasswordEntry> candidates;
-        for (const auto &e : repo_->listEntries()) {
-            if (e.type != PasswordEntryType::WebLogin)
-                continue;
-            if (!PasswordUrl::urlMatchesHost(e.url, host))
-                continue;
-            candidates.push_back(e);
+        if (!host.isEmpty()) {
+            for (const auto &e : repo_->listEntries()) {
+                if (e.type != PasswordEntryType::WebLogin)
+                    continue;
+                if (!PasswordUrl::urlMatchesHost(e.url, host))
+                    continue;
+                candidates.push_back(e);
+            }
         }
 
-        if (candidates.isEmpty()) {
-            QMessageBox::information(uiParent_, "未找到", QString("未找到 %1 的 Web 登录条目。").arg(host));
+        const auto commonItems = repo_->listCommonPasswords();
+
+        if (candidates.isEmpty() && commonItems.isEmpty()) {
+            if (host.isEmpty()) {
+                QMessageBox::information(uiParent_, "未找到", "未找到可用的 Web 登录条目/常用密码。");
+                return;
+            }
+            QMessageBox::information(uiParent_, "未找到", QString("未找到 %1 的 Web 登录条目，也没有常用密码可注入。").arg(host));
             return;
         }
 
         QStringList items;
-        items.reserve(candidates.size());
+        items.reserve(candidates.size() + commonItems.size());
         for (const auto &e : candidates) {
             const auto user = e.username.trimmed().isEmpty() ? QString("<无账号>") : e.username.trimmed();
-            items.push_back(QString("%1 | %2 | #%3").arg(e.title, user).arg(e.id));
+            items.push_back(QString("[Web] %1 | %2 | #%3").arg(e.title, user).arg(e.id));
+        }
+        for (const auto &c : commonItems) {
+            items.push_back(QString("[常用] %1 | #%2").arg(c.name).arg(c.id));
         }
 
         bool ok = false;
-        const auto picked = QInputDialog::getItem(uiParent_, "选择账号", QString("为 %1 选择要填充的账号：").arg(host), items, 0, false, &ok);
+        const auto title = host.isEmpty() ? QString("选择填充项") : QString("为 %1 选择填充项").arg(host);
+        const auto label =
+            host.isEmpty() ? QString("选择要注入到该密码框的项：") : QString("为 %1 选择要注入到该密码框的项：").arg(host);
+        const auto picked = QInputDialog::getItem(uiParent_, title, label, items, 0, false, &ok);
         if (!ok || picked.isEmpty())
             return;
 
-        qint64 entryId = 0;
-        {
-            const auto parts = picked.split('#');
-            if (parts.size() >= 2)
-                entryId = parts.last().toLongLong();
+        auto parseIdFromPicked = [](const QString &text) -> qint64 {
+            const auto idx = text.lastIndexOf('#');
+            if (idx < 0)
+                return 0;
+            return text.mid(idx + 1).toLongLong();
+        };
+
+        if (picked.startsWith("[常用]")) {
+            const auto id = parseIdFromPicked(picked);
+            if (id <= 0) {
+                QMessageBox::warning(uiParent_, "失败", "选择的条目无效。");
+                return;
+            }
+
+            const auto loaded = repo_->loadCommonPassword(id);
+            if (!loaded.has_value()) {
+                QMessageBox::warning(uiParent_, "失败", repo_->lastError());
+                return;
+            }
+
+            emit fillCredentials(QString(), loaded->password);
+            return;
         }
+
+        const auto entryId = parseIdFromPicked(picked);
         if (entryId <= 0) {
             QMessageBox::warning(uiParent_, "失败", "选择的条目无效。");
             return;
@@ -372,6 +401,7 @@ void PasswordWebAssistantDialog::setupUi()
 
     auto *tip = new QLabel(
         "用法：打开登录页 → 密码框右侧会出现“钥”按钮 → 点击后选择账号 → 自动填充。\n"
+        "常用密码：也可选择“常用密码区”的密码，仅填充密码框（不改账号）。\n"
         "保存/更新：表单提交（登录/注册/改密）时会提示保存或更新。\n"
         "说明：这是内置 WebView 的演示实现，不覆盖系统浏览器。",
         this);
@@ -488,7 +518,7 @@ void PasswordWebAssistantDialog::injectScripts()
     var btn = document.createElement('button');
     btn.type = 'button';
     btn.textContent = '钥';
-    btn.title = 'Toolbox：填充账号/密码';
+    btn.title = 'Toolbox：填充账号/密码/常用密码';
     btn.style.position = 'absolute';
     btn.style.right = '4px';
     btn.style.top = '50%';
@@ -616,6 +646,21 @@ void PasswordWebAssistantDialog::injectScripts()
           var pwdInput = window.__tbxpmLastPasswordInput || document.querySelector('input[type="password"]');
           if (pwdInput) {
             setValue(pwdInput, password || '');
+
+            try {
+              var ac = (pwdInput.getAttribute('autocomplete') || '').toLowerCase();
+              if (ac === 'new-password') {
+                var form = pwdInput.form || pwdInput.closest('form');
+                var pwds = passwordInputsIn(form);
+                for (var i = 0; i < pwds.length; i++) {
+                  var p = pwds[i];
+                  if (!p || p === pwdInput) continue;
+                  var pac = (p.getAttribute('autocomplete') || '').toLowerCase();
+                  if (pac === 'new-password') setValue(p, password || '');
+                }
+              }
+            } catch (e) {}
+
             var userInput = findUsernameInput(pwdInput);
             if (userInput && username) setValue(userInput, username);
           }
