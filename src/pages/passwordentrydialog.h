@@ -41,6 +41,7 @@ private:
     QProgressBar *strengthBar_ = nullptr;
     QLabel *strengthLabel_ = nullptr;
     QLineEdit *urlEdit_ = nullptr;
+    QComboBox *typeCombo_ = nullptr;
     QComboBox *categoryCombo_ = nullptr;
     QListWidget *tagsList_ = nullptr;
     QLineEdit *newTagEdit_ = nullptr;

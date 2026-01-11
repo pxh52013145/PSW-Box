@@ -2,7 +2,9 @@
 
 #include "core/apppaths.h"
 #include "core/crypto.h"
+#include "pages/passwordcsvimportdialog.h"
 #include "pages/passwordentrydialog.h"
+#include "pages/passwordgraphdialog.h"
 #include "pages/passwordhealthdialog.h"
 #include "password/passwordcsv.h"
 #include "password/passwordcsvimportworker.h"
@@ -50,6 +52,10 @@
 
 #include <algorithm>
 
+#ifdef TBX_HAS_WEBENGINE
+#include "pages/passwordwebassistantdialog.h"
+#endif
+
 namespace {
 
 class PasswordFilterProxyModel final : public QSortFilterProxyModel
@@ -81,6 +87,12 @@ public:
         invalidateFilter();
     }
 
+    void setEntryType(int entryType)
+    {
+        entryType_ = entryType;
+        invalidateFilter();
+    }
+
 protected:
     bool filterAcceptsRow(int sourceRow, const QModelIndex &sourceParent) const override
     {
@@ -90,6 +102,10 @@ protected:
 
         const auto groupId = model->index(sourceRow, 0, sourceParent).data(PasswordEntryModel::GroupIdRole).toLongLong();
         if (!groupIds_.isEmpty() && !groupIds_.contains(groupId))
+            return false;
+
+        const auto entryType = model->index(sourceRow, 0, sourceParent).data(PasswordEntryModel::EntryTypeRole).toInt();
+        if (entryType_ >= 0 && entryType != entryType_)
             return false;
 
         const auto title = model->index(sourceRow, 0, sourceParent).data().toString();
@@ -119,7 +135,8 @@ protected:
         if (searchText_.isEmpty())
             return true;
 
-        const auto haystack = QString("%1 %2 %3 %4 %5").arg(title, username, url, category, tagsText);
+        const auto typeLabel = passwordEntryTypeLabel(passwordEntryTypeFromInt(entryType));
+        const auto haystack = QString("%1 %2 %3 %4 %5 %6").arg(title, username, url, typeLabel, category, tagsText);
         return haystack.contains(searchText_, Qt::CaseInsensitive);
     }
 
@@ -128,6 +145,7 @@ private:
     QString category_ = "全部";
     QStringList requiredTags_;
     QVector<qint64> groupIds_;
+    int entryType_ = -1;
 };
 
 QString promptPassword(QWidget *parent, const QString &title, const QString &label)
@@ -251,6 +269,8 @@ void PasswordManagerPage::setupUi()
     importCsvBtn_ = new QPushButton("导入 CSV", this);
     exportCsvBtn_ = new QPushButton("导出 CSV", this);
     healthBtn_ = new QPushButton("安全报告", this);
+    webAssistantBtn_ = new QPushButton("Web 助手", this);
+    graphBtn_ = new QPushButton("图谱", this);
 
     topRow->addWidget(createBtn_);
     topRow->addWidget(unlockBtn_);
@@ -262,14 +282,34 @@ void PasswordManagerPage::setupUi()
     topRow->addWidget(importCsvBtn_);
     topRow->addWidget(exportCsvBtn_);
     topRow->addWidget(healthBtn_);
+    topRow->addWidget(webAssistantBtn_);
+    topRow->addWidget(graphBtn_);
     root->addLayout(topRow);
+
+#ifndef TBX_HAS_WEBENGINE
+    if (webAssistantBtn_) {
+        webAssistantBtn_->setEnabled(false);
+        webAssistantBtn_->setToolTip("未安装 Qt WebEngine 模块，Web 助手不可用。");
+    }
+#endif
 
     auto *filterRow = new QHBoxLayout();
     searchEdit_ = new QLineEdit(this);
-    searchEdit_->setPlaceholderText("搜索标题/账号/网址/分类/标签…");
+    searchEdit_->setPlaceholderText("搜索标题/账号/网址/类型/分类/标签…");
 
     tagFilterEdit_ = new QLineEdit(this);
     tagFilterEdit_->setPlaceholderText("标签（逗号分隔）");
+
+    typeCombo_ = new QComboBox(this);
+    typeCombo_->addItem("全部", -1);
+    typeCombo_->addItem(passwordEntryTypeLabel(PasswordEntryType::WebLogin), static_cast<int>(PasswordEntryType::WebLogin));
+    typeCombo_->addItem(passwordEntryTypeLabel(PasswordEntryType::DesktopClient),
+                        static_cast<int>(PasswordEntryType::DesktopClient));
+    typeCombo_->addItem(passwordEntryTypeLabel(PasswordEntryType::ApiKeyToken), static_cast<int>(PasswordEntryType::ApiKeyToken));
+    typeCombo_->addItem(passwordEntryTypeLabel(PasswordEntryType::DatabaseCredential),
+                        static_cast<int>(PasswordEntryType::DatabaseCredential));
+    typeCombo_->addItem(passwordEntryTypeLabel(PasswordEntryType::ServerSsh), static_cast<int>(PasswordEntryType::ServerSsh));
+    typeCombo_->addItem(passwordEntryTypeLabel(PasswordEntryType::DeviceWifi), static_cast<int>(PasswordEntryType::DeviceWifi));
 
     categoryCombo_ = new QComboBox(this);
     categoryCombo_->addItem("全部");
@@ -280,6 +320,9 @@ void PasswordManagerPage::setupUi()
     filterRow->addSpacing(12);
     filterRow->addWidget(new QLabel("标签：", this));
     filterRow->addWidget(tagFilterEdit_);
+    filterRow->addSpacing(12);
+    filterRow->addWidget(new QLabel("类型：", this));
+    filterRow->addWidget(typeCombo_);
     filterRow->addSpacing(12);
     filterRow->addWidget(new QLabel("分类：", this));
     filterRow->addWidget(categoryCombo_);
@@ -367,6 +410,8 @@ void PasswordManagerPage::wireSignals()
     connect(importCsvBtn_, &QPushButton::clicked, this, &PasswordManagerPage::importCsv);
     connect(exportCsvBtn_, &QPushButton::clicked, this, &PasswordManagerPage::exportCsv);
     connect(healthBtn_, &QPushButton::clicked, this, &PasswordManagerPage::showHealthReport);
+    connect(webAssistantBtn_, &QPushButton::clicked, this, &PasswordManagerPage::showWebAssistant);
+    connect(graphBtn_, &QPushButton::clicked, this, &PasswordManagerPage::showGraph);
 
     connect(addBtn_, &QPushButton::clicked, this, &PasswordManagerPage::addEntry);
     connect(editBtn_, &QPushButton::clicked, this, &PasswordManagerPage::editSelectedEntry);
@@ -405,6 +450,11 @@ void PasswordManagerPage::wireSignals()
         static_cast<PasswordFilterProxyModel *>(proxy_)->setRequiredTags(tags);
     });
 
+    connect(typeCombo_, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int) {
+        const auto typeValue = typeCombo_ ? typeCombo_->currentData().toInt() : -1;
+        static_cast<PasswordFilterProxyModel *>(proxy_)->setEntryType(typeValue);
+    });
+
     connect(categoryCombo_, &QComboBox::currentTextChanged, this, [this](const QString &category) {
         static_cast<PasswordFilterProxyModel *>(proxy_)->setCategory(category);
     });
@@ -423,6 +473,40 @@ void PasswordManagerPage::wireSignals()
         }
         lastClipboardSecret_.clear();
     });
+}
+
+void PasswordManagerPage::showWebAssistant()
+{
+#ifdef TBX_HAS_WEBENGINE
+    PasswordWebAssistantDialog dlg(repo_, vault_, this);
+    dlg.exec();
+    refreshAll();
+#else
+    QMessageBox::information(
+        this,
+        "提示",
+        "当前 Qt Kit 未安装 Qt WebEngine 模块，无法使用 Web 助手。\n"
+        "如需启用：使用 Qt Maintenance Tool 安装 Qt WebEngine（webenginewidgets + webchannel）后重新构建。");
+#endif
+}
+
+void PasswordManagerPage::showGraph()
+{
+    if (!vault_->isUnlocked()) {
+        QMessageBox::information(this, "提示", "请先解锁");
+        return;
+    }
+
+    PasswordGraphDialog dlg(repo_, vault_, this);
+    connect(&dlg, &PasswordGraphDialog::filterRequested, this, [this](int entryType, const QString &searchText) {
+        if (typeCombo_) {
+            const auto idx = typeCombo_->findData(entryType);
+            typeCombo_->setCurrentIndex(idx >= 0 ? idx : 0);
+        }
+        if (searchEdit_)
+            searchEdit_->setText(searchText);
+    });
+    dlg.exec();
 }
 
 void PasswordManagerPage::refreshAll()
@@ -492,6 +576,7 @@ void PasswordManagerPage::updateUiState()
     importCsvBtn_->setEnabled(initialized && unlocked);
     exportCsvBtn_->setEnabled(initialized && unlocked);
     healthBtn_->setEnabled(initialized && unlocked);
+    graphBtn_->setEnabled(initialized && unlocked);
 
     addBtn_->setEnabled(initialized && unlocked);
     editBtn_->setEnabled(initialized && unlocked && hasSelection);
@@ -935,6 +1020,7 @@ void PasswordManagerPage::exportBackup()
         obj["password"] = full->password;
         obj["url"] = full->entry.url;
         obj["group_id"] = full->entry.groupId;
+        obj["entry_type"] = static_cast<int>(full->entry.type);
         obj["category"] = full->entry.category;
         QJsonArray tags;
         for (const auto &tag : full->entry.tags)
@@ -1149,6 +1235,8 @@ void PasswordManagerPage::importBackup()
         secrets.password = obj.value("password").toString();
         secrets.entry.url = obj.value("url").toString();
         const auto groupId = static_cast<qint64>(obj.value("group_id").toDouble());
+        if (obj.contains("entry_type"))
+            secrets.entry.type = passwordEntryTypeFromInt(obj.value("entry_type").toInt());
         if (hasGroupMap)
             secrets.entry.groupId = groupIdMap.value(groupId, 1);
         else
@@ -1232,21 +1320,26 @@ void PasswordManagerPage::importCsv()
         return;
     }
 
-    const auto path = QFileDialog::getOpenFileName(this, "导入 CSV", "", "CSV 文件 (*.csv)");
+    QString groupName = "全部";
+    if (groupModel_) {
+        const auto idx = groupModel_->indexForGroupId(selectedGroupId());
+        if (idx.isValid())
+            groupName = idx.data(Qt::DisplayRole).toString();
+    }
+
+    PasswordCsvImportDialog dlg(selectedGroupId(), groupName, this);
+    if (dlg.exec() != QDialog::Accepted)
+        return;
+
+    const auto path = dlg.csvPath();
     if (path.isEmpty())
         return;
-
-    const auto info =
-        "请确认该 CSV 文件来源可信。\n"
-        "注意：浏览器导出的 CSV 通常包含明文密码，导入完成后建议立即删除原文件。\n\n"
-        "确定开始导入吗？";
-
-    if (QMessageBox::question(this, "导入提示", info, QMessageBox::Yes | QMessageBox::No, QMessageBox::No) != QMessageBox::Yes)
-        return;
+    const auto options = dlg.options();
 
     const auto dbPath = QDir(AppPaths::appDataDir()).filePath("password.sqlite3");
     auto *thread = new QThread(this);
     auto *worker = new PasswordCsvImportWorker(path, dbPath, vault_->masterKey(), selectedGroupId(), nullptr);
+    worker->setOptions(options);
     worker->moveToThread(thread);
 
     auto *progress = new QProgressDialog("正在导入 CSV…", "取消", 0, 0, this);
@@ -1272,12 +1365,13 @@ void PasswordManagerPage::importCsv()
     connect(worker,
             &PasswordCsvImportWorker::finished,
             this,
-            [this, progress](int imported, int skippedDuplicates, int skippedInvalid, const QStringList &warnings) {
+            [this, progress](int inserted, int updated, int skippedDuplicates, int skippedInvalid, const QStringList &warnings) {
                 progress->close();
                 refreshAll();
 
-                QString msg = QString("导入完成：%1 条。\n跳过重复：%2 条。\n跳过无效：%3 条。")
-                                  .arg(imported)
+                QString msg = QString("导入完成：\n新增：%1 条。\n更新：%2 条。\n跳过重复：%3 条。\n跳过无效：%4 条。")
+                                  .arg(inserted)
+                                  .arg(updated)
                                   .arg(skippedDuplicates)
                                   .arg(skippedInvalid);
                 if (!warnings.isEmpty())

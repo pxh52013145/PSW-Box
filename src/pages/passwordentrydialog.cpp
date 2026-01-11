@@ -36,6 +36,15 @@ void PasswordEntryDialog::setupUi(const QStringList &categories, const QStringLi
     auto *form = new QFormLayout();
     form->setLabelAlignment(Qt::AlignRight);
 
+    typeCombo_ = new QComboBox(this);
+    typeCombo_->addItem("Web 登录", static_cast<int>(PasswordEntryType::WebLogin));
+    typeCombo_->addItem("桌面/客户端", static_cast<int>(PasswordEntryType::DesktopClient));
+    typeCombo_->addItem("API Key/Token", static_cast<int>(PasswordEntryType::ApiKeyToken));
+    typeCombo_->addItem("数据库凭据", static_cast<int>(PasswordEntryType::DatabaseCredential));
+    typeCombo_->addItem("服务器/SSH", static_cast<int>(PasswordEntryType::ServerSsh));
+    typeCombo_->addItem("设备/Wi-Fi", static_cast<int>(PasswordEntryType::DeviceWifi));
+    form->addRow("类型：", typeCombo_);
+
     titleEdit_ = new QLineEdit(this);
     titleEdit_->setPlaceholderText("例如：GitHub / QQ / 学校教务系统");
     form->addRow("标题：", titleEdit_);
@@ -125,6 +134,8 @@ void PasswordEntryDialog::setupUi(const QStringList &categories, const QStringLi
     root->addWidget(buttonBox_);
 
     connect(buttonBox_, &QDialogButtonBox::accepted, this, [this]() {
+        data_.entry.type = passwordEntryTypeFromInt(typeCombo_ ? typeCombo_->currentData().toInt()
+                                                               : static_cast<int>(PasswordEntryType::WebLogin));
         data_.entry.title = titleEdit_->text().trimmed();
         data_.entry.username = usernameEdit_->text().trimmed();
         data_.password = passwordEdit_->text();
@@ -145,6 +156,50 @@ void PasswordEntryDialog::setupUi(const QStringList &categories, const QStringLi
 
     connect(tagAddBtn_, &QToolButton::clicked, this, &PasswordEntryDialog::addTagFromEdit);
     connect(newTagEdit_, &QLineEdit::returnPressed, this, &PasswordEntryDialog::addTagFromEdit);
+
+    const auto applyTypeHints = [this]() {
+        if (!typeCombo_ || !titleEdit_ || !usernameEdit_ || !urlEdit_)
+            return;
+
+        const auto type = passwordEntryTypeFromInt(typeCombo_->currentData().toInt());
+        switch (type) {
+        case PasswordEntryType::WebLogin:
+            titleEdit_->setPlaceholderText("例如：GitHub / QQ / 学校教务系统");
+            usernameEdit_->setPlaceholderText("邮箱/手机号/用户名");
+            urlEdit_->setPlaceholderText("https://example.com");
+            break;
+        case PasswordEntryType::DesktopClient:
+            titleEdit_->setPlaceholderText("例如：Steam / 微信 / 飞书");
+            usernameEdit_->setPlaceholderText("账号/邮箱/手机号（可选）");
+            urlEdit_->setPlaceholderText("官网/下载页（可选）");
+            break;
+        case PasswordEntryType::ApiKeyToken:
+            titleEdit_->setPlaceholderText("例如：OpenAI / 阿里云 / GitHub Token");
+            usernameEdit_->setPlaceholderText("Key ID / Access Key（可选）");
+            urlEdit_->setPlaceholderText("控制台/文档链接（可选）");
+            break;
+        case PasswordEntryType::DatabaseCredential:
+            titleEdit_->setPlaceholderText("例如：MySQL 生产库 / Postgres 测试库");
+            usernameEdit_->setPlaceholderText("数据库用户名");
+            urlEdit_->setPlaceholderText("连接信息/控制台链接（可选）");
+            break;
+        case PasswordEntryType::ServerSsh:
+            titleEdit_->setPlaceholderText("例如：腾讯云 CVM / 内网堡垒机");
+            usernameEdit_->setPlaceholderText("登录用户名（如 root/ubuntu）");
+            urlEdit_->setPlaceholderText("主机地址/控制台链接（可选）");
+            break;
+        case PasswordEntryType::DeviceWifi:
+            titleEdit_->setPlaceholderText("例如：家里 Wi-Fi / 路由器后台");
+            usernameEdit_->setPlaceholderText("账号（如路由器 admin，可选）");
+            urlEdit_->setPlaceholderText("SSID/管理地址（可选）");
+            break;
+        }
+    };
+
+    connect(typeCombo_, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [applyTypeHints](int) {
+        applyTypeHints();
+    });
+    applyTypeHints();
 }
 
 void PasswordEntryDialog::updateOkButtonState()
@@ -225,6 +280,12 @@ QStringList PasswordEntryDialog::selectedTags() const
 void PasswordEntryDialog::setEntry(const PasswordEntrySecrets &secrets)
 {
     data_ = secrets;
+
+    if (typeCombo_) {
+        const auto idx = typeCombo_->findData(static_cast<int>(secrets.entry.type));
+        if (idx >= 0)
+            typeCombo_->setCurrentIndex(idx);
+    }
 
     titleEdit_->setText(secrets.entry.title);
     usernameEdit_->setText(secrets.entry.username);

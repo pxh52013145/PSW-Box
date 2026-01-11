@@ -4,9 +4,12 @@
 #include "password/passworddatabase.h"
 #include "password/passwordfaviconservice.h"
 #include "password/passwordgenerator.h"
+#include "password/passwordgraph.h"
 #include "password/passwordhealthworker.h"
 #include "password/passwordrepository.h"
 #include "password/passwordstrength.h"
+#include "password/passwordurl.h"
+#include "password/passwordwebloginmatcher.h"
 #include "password/passwordvault.h"
 
 #include <QBuffer>
@@ -75,6 +78,88 @@ private slots:
         QVERIFY(strong.score >= 60);
     }
 
+    void url_host_match_basics()
+    {
+        QCOMPARE(PasswordUrl::hostFromUrl("https://example.com/login"), QString("example.com"));
+        QCOMPARE(PasswordUrl::hostFromUrl("http://www.example.com/"), QString("example.com"));
+        QCOMPARE(PasswordUrl::hostFromUrl("example.com"), QString("example.com"));
+        QVERIFY(PasswordUrl::urlMatchesHost("https://www.example.com/a", "example.com"));
+        QVERIFY(PasswordUrl::hostsEqual("www.EXAMPLE.com", "example.com"));
+    }
+
+    void web_login_matcher_basics()
+    {
+        PasswordEntry e1;
+        e1.type = PasswordEntryType::WebLogin;
+        e1.title = "Example";
+        e1.username = "Alice";
+        e1.url = "https://www.example.com/login";
+
+        PasswordEntry e2 = e1;
+        e2.username = "";
+        e2.url = "https://example.com/";
+
+        PasswordEntry e3 = e1;
+        e3.url = "https://other.example.com/";
+
+        PasswordEntry e4 = e1;
+        e4.type = PasswordEntryType::ApiKeyToken;
+        e4.url = "https://example.com/";
+
+        const auto r1 = PasswordWebLoginMatcher::match({e1, e2, e3, e4}, "https://example.com/sso", "alice");
+        QCOMPARE(r1.host, QString("example.com"));
+        QCOMPARE(r1.hostEntries.size(), 2);
+        QCOMPARE(r1.userEntries.size(), 1);
+        QCOMPARE(r1.userEntries.at(0).username, QString("Alice"));
+
+        const auto r2 = PasswordWebLoginMatcher::match({e1, e2, e3, e4}, "https://example.com/login", "");
+        QCOMPARE(r2.host, QString("example.com"));
+        QCOMPARE(r2.hostEntries.size(), 2);
+        QCOMPARE(r2.userEntries.size(), 1);
+        QVERIFY(r2.userEntries.at(0).username.trimmed().isEmpty());
+    }
+
+    void schema_password_entries_has_entry_type()
+    {
+        auto db = PasswordDatabase::db();
+        QVERIFY(db.isOpen());
+
+        QSqlQuery q(db);
+        QVERIFY(q.exec("PRAGMA table_info(password_entries)"));
+
+        bool found = false;
+        while (q.next()) {
+            if (q.value(1).toString() == "entry_type") {
+                found = true;
+                break;
+            }
+        }
+        QVERIFY(found);
+    }
+
+    void entry_type_persisted()
+    {
+        PasswordVault vault;
+        QVERIFY(vault.createVault("master"));
+
+        PasswordRepository repo(&vault);
+        PasswordEntrySecrets e;
+        e.entry.type = PasswordEntryType::DatabaseCredential;
+        e.entry.title = "MySQL Prod";
+        e.entry.username = "root";
+        e.password = "StrongPwd!123";
+        e.entry.url = "mysql://prod.example.com:3306";
+        QVERIFY(repo.addEntry(e));
+
+        const auto list = repo.listEntries();
+        QCOMPARE(list.size(), 1);
+        QCOMPARE(static_cast<int>(list.at(0).type), static_cast<int>(PasswordEntryType::DatabaseCredential));
+
+        const auto loaded = repo.loadEntry(list.at(0).id);
+        QVERIFY(loaded.has_value());
+        QCOMPARE(static_cast<int>(loaded->entry.type), static_cast<int>(PasswordEntryType::DatabaseCredential));
+    }
+
     void csv_export_parse_roundtrip()
     {
         PasswordVault vault;
@@ -112,6 +197,202 @@ private slots:
         QVERIFY(parsed.entries.at(0).entry.tags.contains("dev"));
         QVERIFY(parsed.entries.at(0).entry.tags.contains("git"));
         QCOMPARE(parsed.entries.at(0).notes, QString("note, with comma"));
+    }
+
+    void csv_parse_chrome_export_header()
+    {
+        const QByteArray csv("\xEF\xBB\xBFname,url,username,password\r\nExample,https://example.com,alice,SecretPwd!\r\n");
+        const auto parsed = parsePasswordCsv(csv, 1);
+        QVERIFY(parsed.ok());
+        QCOMPARE(parsed.entries.size(), 1);
+        QCOMPARE(parsed.entries.at(0).entry.title, QString("Example"));
+        QCOMPARE(parsed.entries.at(0).entry.username, QString("alice"));
+        QCOMPARE(parsed.entries.at(0).password, QString("SecretPwd!"));
+        QCOMPARE(parsed.entries.at(0).entry.url, QString("https://example.com"));
+    }
+
+    void csv_parse_keepassxc_export_header()
+    {
+        const QByteArray csv("Group,Title,Username,Password,URL,Notes\r\nPersonal/Email,Gmail,me@gmail.com,SecretPwd!,https://mail.google.com,hello\r\n");
+        const auto parsed = parsePasswordCsv(csv, 1);
+        QVERIFY(parsed.ok());
+        QCOMPARE(parsed.entries.size(), 1);
+        QCOMPARE(parsed.entries.at(0).entry.category, QString("Personal/Email"));
+        QCOMPARE(parsed.entries.at(0).entry.title, QString("Gmail"));
+        QCOMPARE(parsed.entries.at(0).entry.username, QString("me@gmail.com"));
+        QCOMPARE(parsed.entries.at(0).password, QString("SecretPwd!"));
+        QCOMPARE(parsed.entries.at(0).entry.url, QString("https://mail.google.com"));
+        QCOMPARE(parsed.entries.at(0).notes, QString("hello"));
+    }
+
+    void csv_import_keepassxc_header()
+    {
+        PasswordVault vault;
+        QVERIFY(vault.createVault("master"));
+
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const auto csvPath = QDir(dir.path()).filePath("keepassxc.csv");
+        {
+            QFile f(csvPath);
+            QVERIFY(f.open(QIODevice::WriteOnly));
+            f.write("Group,Title,Username,Password,URL,Notes\r\nPersonal/Email,Gmail,me@gmail.com,SecretPwd!,https://mail.google.com,hello\r\n");
+        }
+
+        const auto dbPath = QDir(AppPaths::appDataDir()).filePath("password.sqlite3");
+
+        PasswordCsvImportWorker importer(csvPath, dbPath, vault.masterKey(), 1, nullptr);
+        QSignalSpy spyFinished(&importer, &PasswordCsvImportWorker::finished);
+        QSignalSpy spyFailed(&importer, &PasswordCsvImportWorker::failed);
+        importer.run();
+        QCOMPARE(spyFailed.count(), 0);
+        QCOMPARE(spyFinished.count(), 1);
+
+        PasswordRepository repo(&vault);
+        const auto list = repo.listEntries();
+        QCOMPARE(list.size(), 1);
+        QCOMPARE(list.at(0).title, QString("Gmail"));
+        QCOMPARE(list.at(0).username, QString("me@gmail.com"));
+        QCOMPARE(list.at(0).url, QString("https://mail.google.com"));
+        QCOMPARE(list.at(0).category, QString("Personal/Email"));
+
+        const auto loaded = repo.loadEntry(list.at(0).id);
+        QVERIFY(loaded.has_value());
+        QCOMPARE(loaded->password, QString("SecretPwd!"));
+        QCOMPARE(loaded->notes, QString("hello"));
+    }
+
+    void csv_import_update_duplicates()
+    {
+        PasswordVault vault;
+        QVERIFY(vault.createVault("master"));
+
+        PasswordRepository repo(&vault);
+
+        PasswordEntrySecrets e;
+        e.entry.title = "Example";
+        e.entry.username = "alice";
+        e.password = "OldPwd!";
+        e.entry.url = "https://example.com/login";
+        e.entry.tags = {"oldtag"};
+        QVERIFY(repo.addEntry(e));
+
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const auto csvPath = QDir(dir.path()).filePath("update.csv");
+        {
+            QFile f(csvPath);
+            QVERIFY(f.open(QIODevice::WriteOnly));
+            f.write("title,username,password,url,category,tags,notes\r\n");
+            f.write("Example,alice,NewPwd!,https://example.com/login,Personal,newtag,hello\r\n");
+        }
+
+        const auto dbPath = QDir(AppPaths::appDataDir()).filePath("password.sqlite3");
+        PasswordCsvImportWorker importer(csvPath, dbPath, vault.masterKey(), 1, nullptr);
+        PasswordCsvImportOptions opt;
+        opt.duplicatePolicy = PasswordCsvDuplicatePolicy::Update;
+        importer.setOptions(opt);
+
+        QSignalSpy spyFinished(&importer, &PasswordCsvImportWorker::finished);
+        QSignalSpy spyFailed(&importer, &PasswordCsvImportWorker::failed);
+        importer.run();
+        QCOMPARE(spyFailed.count(), 0);
+        QCOMPARE(spyFinished.count(), 1);
+
+        const auto args = spyFinished.takeFirst();
+        const int inserted = args.at(0).toInt();
+        const int updated = args.at(1).toInt();
+        QCOMPARE(inserted, 0);
+        QCOMPARE(updated, 1);
+
+        const auto list = repo.listEntries();
+        QCOMPARE(list.size(), 1);
+        const auto loaded = repo.loadEntry(list.at(0).id);
+        QVERIFY(loaded.has_value());
+        QCOMPARE(loaded->password, QString("NewPwd!"));
+        QVERIFY(loaded->entry.tags.contains("newtag"));
+        QVERIFY(!loaded->entry.tags.contains("oldtag"));
+    }
+
+    void csv_import_create_groups_from_category_path()
+    {
+        PasswordVault vault;
+        QVERIFY(vault.createVault("master"));
+
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const auto csvPath = QDir(dir.path()).filePath("keepassxc.csv");
+        {
+            QFile f(csvPath);
+            QVERIFY(f.open(QIODevice::WriteOnly));
+            f.write("Group,Title,Username,Password,URL,Notes\r\n");
+            f.write("Personal/Email,Gmail,me@gmail.com,SecretPwd!,https://mail.google.com,hello\r\n");
+        }
+
+        const auto dbPath = QDir(AppPaths::appDataDir()).filePath("password.sqlite3");
+        PasswordCsvImportWorker importer(csvPath, dbPath, vault.masterKey(), 1, nullptr);
+        PasswordCsvImportOptions opt;
+        opt.createGroupsFromCategoryPath = true;
+        importer.setOptions(opt);
+
+        QSignalSpy spyFinished(&importer, &PasswordCsvImportWorker::finished);
+        QSignalSpy spyFailed(&importer, &PasswordCsvImportWorker::failed);
+        importer.run();
+        QCOMPARE(spyFailed.count(), 0);
+        QCOMPARE(spyFinished.count(), 1);
+
+        PasswordRepository repo(&vault);
+        const auto groups = repo.listGroups();
+
+        qint64 personalId = 0;
+        qint64 emailId = 0;
+        for (const auto &g : groups) {
+            if (g.parentId == 1 && g.name == "Personal")
+                personalId = g.id;
+        }
+        QVERIFY(personalId > 0);
+        for (const auto &g : groups) {
+            if (g.parentId == personalId && g.name == "Email")
+                emailId = g.id;
+        }
+        QVERIFY(emailId > 0);
+
+        const auto list = repo.listEntries();
+        QCOMPARE(list.size(), 1);
+        QCOMPARE(list.at(0).groupId, emailId);
+    }
+
+    void csv_import_default_entry_type()
+    {
+        PasswordVault vault;
+        QVERIFY(vault.createVault("master"));
+
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const auto csvPath = QDir(dir.path()).filePath("type.csv");
+        {
+            QFile f(csvPath);
+            QVERIFY(f.open(QIODevice::WriteOnly));
+            f.write("title,username,password,url,category,tags,notes\r\n");
+            f.write("GitHub Token,,ghp_xxx,,dev,token,\r\n");
+        }
+
+        const auto dbPath = QDir(AppPaths::appDataDir()).filePath("password.sqlite3");
+        PasswordCsvImportWorker importer(csvPath, dbPath, vault.masterKey(), 1, nullptr);
+        PasswordCsvImportOptions opt;
+        opt.defaultEntryType = PasswordEntryType::ApiKeyToken;
+        importer.setOptions(opt);
+
+        QSignalSpy spyFinished(&importer, &PasswordCsvImportWorker::finished);
+        QSignalSpy spyFailed(&importer, &PasswordCsvImportWorker::failed);
+        importer.run();
+        QCOMPARE(spyFailed.count(), 0);
+        QCOMPARE(spyFinished.count(), 1);
+
+        PasswordRepository repo(&vault);
+        const auto list = repo.listEntries();
+        QCOMPARE(list.size(), 1);
+        QCOMPARE(static_cast<int>(list.at(0).type), static_cast<int>(PasswordEntryType::ApiKeyToken));
     }
 
     void csv_import_dedup_and_health_scan()
@@ -166,8 +447,10 @@ private slots:
         importer2.run();
         QCOMPARE(spyFinished2.count(), 1);
         const auto args2 = spyFinished2.takeFirst();
-        const int imported2 = args2.at(0).toInt();
-        QVERIFY(imported2 == 0);
+        const int inserted2 = args2.at(0).toInt();
+        const int updated2 = args2.at(1).toInt();
+        QVERIFY(inserted2 == 0);
+        QVERIFY(updated2 == 0);
 
         // make entries stale
         {
@@ -198,6 +481,59 @@ private slots:
         }
         QVERIFY(reusedCount >= 2);
         QVERIFY(staleCount >= 2);
+    }
+
+    void graph_build_basics()
+    {
+        PasswordEntry a;
+        a.type = PasswordEntryType::WebLogin;
+        a.title = "Example";
+        a.username = "alice";
+        a.url = "https://example.com/login";
+
+        PasswordEntry b = a;
+        b.username = "bob";
+
+        PasswordEntry c;
+        c.type = PasswordEntryType::ApiKeyToken;
+        c.title = "GitHub Token";
+        c.username = "";
+        c.url = "";
+
+        const auto graph = PasswordGraph::build({a, b, c});
+
+        int typeCount = 0;
+        int serviceCount = 0;
+        int accountCount = 0;
+        for (const auto &n : graph.nodes) {
+            switch (n.kind) {
+            case PasswordGraph::NodeKind::Type:
+                typeCount++;
+                break;
+            case PasswordGraph::NodeKind::Service:
+                serviceCount++;
+                break;
+            case PasswordGraph::NodeKind::Account:
+                accountCount++;
+                break;
+            default:
+                break;
+            }
+        }
+
+        QCOMPARE(typeCount, 2);
+        QCOMPARE(serviceCount, 2);
+        QCOMPARE(accountCount, 3);
+        QCOMPARE(graph.edges.size(), 5);
+
+        bool foundWebService = false;
+        for (const auto &n : graph.nodes) {
+            if (n.kind != PasswordGraph::NodeKind::Service)
+                continue;
+            if (n.label == "example.com")
+                foundWebService = true;
+        }
+        QVERIFY(foundWebService);
     }
 
     void favicon_cache_roundtrip()

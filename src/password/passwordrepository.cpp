@@ -133,7 +133,7 @@ QVector<PasswordEntry> PasswordRepository::listEntries() const
 
     QSqlQuery query(database);
     query.prepare(R"sql(
-        SELECT id, group_id, title, username, url, category, created_at, updated_at
+        SELECT id, group_id, entry_type, title, username, url, category, created_at, updated_at
         FROM password_entries
         ORDER BY updated_at DESC
     )sql");
@@ -147,12 +147,13 @@ QVector<PasswordEntry> PasswordRepository::listEntries() const
         PasswordEntry entry;
         entry.id = query.value(0).toLongLong();
         entry.groupId = query.value(1).toLongLong();
-        entry.title = query.value(2).toString();
-        entry.username = query.value(3).toString();
-        entry.url = query.value(4).toString();
-        entry.category = query.value(5).toString();
-        entry.createdAt = QDateTime::fromSecsSinceEpoch(query.value(6).toLongLong());
-        entry.updatedAt = QDateTime::fromSecsSinceEpoch(query.value(7).toLongLong());
+        entry.type = passwordEntryTypeFromInt(query.value(2).toInt());
+        entry.title = query.value(3).toString();
+        entry.username = query.value(4).toString();
+        entry.url = query.value(5).toString();
+        entry.category = query.value(6).toString();
+        entry.createdAt = QDateTime::fromSecsSinceEpoch(query.value(7).toLongLong());
+        entry.updatedAt = QDateTime::fromSecsSinceEpoch(query.value(8).toLongLong());
         items.push_back(entry);
     }
 
@@ -413,13 +414,15 @@ bool PasswordRepository::addEntryWithTimestamps(const PasswordEntrySecrets &secr
     const auto createdAt = normalizeTs(createdAtSecs, now);
     const auto updatedAt = normalizeTs(updatedAtSecs, createdAt);
     const auto groupId = secrets.entry.groupId > 0 ? secrets.entry.groupId : 1;
+    const auto entryType = static_cast<int>(secrets.entry.type);
 
     QSqlQuery query(database);
     query.prepare(R"sql(
-        INSERT INTO password_entries(group_id, title, username, password_enc, url, category, notes_enc, created_at, updated_at)
-        VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO password_entries(group_id, entry_type, title, username, password_enc, url, category, notes_enc, created_at, updated_at)
+        VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     )sql");
     query.addBindValue(groupId);
+    query.addBindValue(entryType);
     query.addBindValue(secrets.entry.title);
     query.addBindValue(secrets.entry.username);
     query.addBindValue(passwordEnc);
@@ -480,14 +483,16 @@ bool PasswordRepository::updateEntry(const PasswordEntrySecrets &secrets)
     const auto notesEnc = secrets.notes.trimmed().isEmpty() ? QByteArray() : Crypto::seal(key, secrets.notes.toUtf8());
     const auto now = QDateTime::currentDateTime().toSecsSinceEpoch();
     const auto groupId = secrets.entry.groupId > 0 ? secrets.entry.groupId : 1;
+    const auto entryType = static_cast<int>(secrets.entry.type);
 
     QSqlQuery query(database);
     query.prepare(R"sql(
         UPDATE password_entries
-        SET group_id = ?, title = ?, username = ?, password_enc = ?, url = ?, category = ?, notes_enc = ?, updated_at = ?
+        SET group_id = ?, entry_type = ?, title = ?, username = ?, password_enc = ?, url = ?, category = ?, notes_enc = ?, updated_at = ?
         WHERE id = ?
     )sql");
     query.addBindValue(groupId);
+    query.addBindValue(entryType);
     query.addBindValue(secrets.entry.title);
     query.addBindValue(secrets.entry.username);
     query.addBindValue(passwordEnc);
@@ -592,7 +597,7 @@ std::optional<PasswordEntrySecrets> PasswordRepository::loadEntry(qint64 id) con
 
     QSqlQuery query(database);
     query.prepare(R"sql(
-        SELECT id, group_id, title, username, password_enc, url, category, notes_enc, created_at, updated_at
+        SELECT id, group_id, entry_type, title, username, password_enc, url, category, notes_enc, created_at, updated_at
         FROM password_entries
         WHERE id = ?
         LIMIT 1
@@ -612,14 +617,15 @@ std::optional<PasswordEntrySecrets> PasswordRepository::loadEntry(qint64 id) con
     PasswordEntrySecrets out;
     out.entry.id = query.value(0).toLongLong();
     out.entry.groupId = query.value(1).toLongLong();
-    out.entry.title = query.value(2).toString();
-    out.entry.username = query.value(3).toString();
-    const auto passwordEnc = query.value(4).toByteArray();
-    out.entry.url = query.value(5).toString();
-    out.entry.category = query.value(6).toString();
-    const auto notesEnc = query.value(7).toByteArray();
-    out.entry.createdAt = QDateTime::fromSecsSinceEpoch(query.value(8).toLongLong());
-    out.entry.updatedAt = QDateTime::fromSecsSinceEpoch(query.value(9).toLongLong());
+    out.entry.type = passwordEntryTypeFromInt(query.value(2).toInt());
+    out.entry.title = query.value(3).toString();
+    out.entry.username = query.value(4).toString();
+    const auto passwordEnc = query.value(5).toByteArray();
+    out.entry.url = query.value(6).toString();
+    out.entry.category = query.value(7).toString();
+    const auto notesEnc = query.value(8).toByteArray();
+    out.entry.createdAt = QDateTime::fromSecsSinceEpoch(query.value(9).toLongLong());
+    out.entry.updatedAt = QDateTime::fromSecsSinceEpoch(query.value(10).toLongLong());
 
     QSqlQuery tagQuery(database);
     tagQuery.prepare(R"sql(

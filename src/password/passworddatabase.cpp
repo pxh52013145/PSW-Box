@@ -96,6 +96,7 @@ bool PasswordDatabase::ensureSchema(QSqlDatabase &database)
         CREATE TABLE IF NOT EXISTS password_entries (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             group_id INTEGER NOT NULL DEFAULT 1,
+            entry_type INTEGER NOT NULL DEFAULT 0,
             title TEXT NOT NULL,
             username TEXT,
             password_enc BLOB NOT NULL,
@@ -113,6 +114,11 @@ bool PasswordDatabase::ensureSchema(QSqlDatabase &database)
             return false;
     }
 
+    if (!hasColumn(database, "password_entries", "entry_type")) {
+        if (!query.exec("ALTER TABLE password_entries ADD COLUMN entry_type INTEGER NOT NULL DEFAULT 0"))
+            return false;
+    }
+
     if (!query.exec(R"sql(
         CREATE INDEX IF NOT EXISTS idx_password_entries_category
         ON password_entries(category)
@@ -122,6 +128,12 @@ bool PasswordDatabase::ensureSchema(QSqlDatabase &database)
     if (!query.exec(R"sql(
         CREATE INDEX IF NOT EXISTS idx_password_entries_group_id
         ON password_entries(group_id)
+    )sql"))
+        return false;
+
+    if (!query.exec(R"sql(
+        CREATE INDEX IF NOT EXISTS idx_password_entries_entry_type
+        ON password_entries(entry_type)
     )sql"))
         return false;
 

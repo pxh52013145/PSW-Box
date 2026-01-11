@@ -1,6 +1,6 @@
 QT += core testlib sql network
 
-CONFIG += c++17 console
+CONFIG += c++17 console utf8_source
 
 TEMPLATE = app
 TARGET = ToolboxPasswordIntegrationTests
@@ -19,6 +19,9 @@ SOURCES += \
     ../../src/password/passwordcsvimportworker.cpp \
     ../../src/password/passwordstrength.cpp \
     ../../src/password/passwordgenerator.cpp \
+    ../../src/password/passwordurl.cpp \
+    ../../src/password/passwordgraph.cpp \
+    ../../src/password/passwordwebloginmatcher.cpp \
     ../../src/password/passwordfaviconservice.cpp \
     ../../src/password/passwordhealthworker.cpp
 
@@ -34,6 +37,9 @@ HEADERS += \
     ../../src/password/passwordcsvimportworker.h \
     ../../src/password/passwordstrength.h \
     ../../src/password/passwordgenerator.h \
+    ../../src/password/passwordurl.h \
+    ../../src/password/passwordgraph.h \
+    ../../src/password/passwordwebloginmatcher.h \
     ../../src/password/passwordfaviconservice.h \
     ../../src/password/passwordhealth.h \
     ../../src/password/passwordhealthworker.h

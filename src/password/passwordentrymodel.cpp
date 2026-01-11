@@ -86,6 +86,9 @@ QVariant PasswordEntryModel::data(const QModelIndex &index, int role) const
     if (role == TagsRole)
         return item.tags;
 
+    if (role == EntryTypeRole)
+        return static_cast<int>(item.type);
+
     if (role == Qt::DecorationRole && index.column() == 0 && faviconService_) {
         const auto icon = faviconService_->iconForUrl(item.url);
         if (!icon.isNull())
@@ -112,8 +115,9 @@ QVariant PasswordEntryModel::data(const QModelIndex &index, int role) const
     }
 
     if (role == Qt::ToolTipRole) {
-        return QString("标题：%1\n账号：%2\n网址：%3\n分类：%4\n标签：%5")
+        return QString("标题：%1\n类型：%2\n账号：%3\n网址：%4\n分类：%5\n标签：%6")
             .arg(item.title,
+                 passwordEntryTypeLabel(item.type),
                  item.username,
                  item.url,
                  item.category.isEmpty() ? "未分类" : item.category,
@@ -162,6 +166,7 @@ void PasswordEntryModel::reload()
         SELECT
             e.id,
             e.group_id,
+            e.entry_type,
             e.title,
             e.username,
             e.url,
@@ -181,13 +186,14 @@ void PasswordEntryModel::reload()
             PasswordEntry entry;
             entry.id = query.value(0).toLongLong();
             entry.groupId = query.value(1).toLongLong();
-            entry.title = query.value(2).toString();
-            entry.username = query.value(3).toString();
-            entry.url = query.value(4).toString();
-            entry.category = query.value(5).toString();
-            entry.createdAt = QDateTime::fromSecsSinceEpoch(query.value(6).toLongLong());
-            entry.updatedAt = QDateTime::fromSecsSinceEpoch(query.value(7).toLongLong());
-            const auto tagsCsv = query.value(8).toString();
+            entry.type = passwordEntryTypeFromInt(query.value(2).toInt());
+            entry.title = query.value(3).toString();
+            entry.username = query.value(4).toString();
+            entry.url = query.value(5).toString();
+            entry.category = query.value(6).toString();
+            entry.createdAt = QDateTime::fromSecsSinceEpoch(query.value(7).toLongLong());
+            entry.updatedAt = QDateTime::fromSecsSinceEpoch(query.value(8).toLongLong());
+            const auto tagsCsv = query.value(9).toString();
             if (!tagsCsv.trimmed().isEmpty()) {
                 for (const auto &tag : tagsCsv.split(',', Qt::SkipEmptyParts))
                     entry.tags.push_back(tag.trimmed());

@@ -14,6 +14,7 @@ public:
     {
         GroupIdRole = Qt::UserRole + 1,
         TagsRole,
+        EntryTypeRole,
     };
 
     explicit PasswordEntryModel(QObject *parent = nullptr);

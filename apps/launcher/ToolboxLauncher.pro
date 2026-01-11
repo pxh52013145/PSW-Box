@@ -1,6 +1,6 @@
 QT += core gui widgets network
 
-CONFIG += c++17
+CONFIG += c++17 utf8_source
 
 TEMPLATE = app
 TARGET = ToolboxLauncher
@@ -22,4 +22,3 @@ HEADERS += \
     ../../src/core/apppaths.h \
     ../../src/core/logging.h \
     ../../src/core/singleinstance.h
-

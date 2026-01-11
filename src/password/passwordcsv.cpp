@@ -150,6 +150,53 @@ QString joinTags(const QStringList &tags)
 
 } // namespace
 
+PasswordCsvInfo detectPasswordCsv(const QByteArray &csvData, QString *errorOut)
+{
+    PasswordCsvInfo info;
+
+    auto text = QString::fromUtf8(csvData);
+    if (!text.isEmpty() && text.at(0) == QChar(0xFEFF))
+        text.remove(0, 1);
+
+    const auto firstLine = text.section('\n', 0, 0);
+    info.delimiter = detectDelimiter(firstLine);
+
+    QString error;
+    const auto table = parseCsvText(text, info.delimiter, &error);
+    if (!error.isEmpty()) {
+        if (errorOut)
+            *errorOut = error;
+        return info;
+    }
+
+    info.header = table.header;
+    if (info.header.isEmpty()) {
+        if (errorOut)
+            *errorOut = "CSV 为空或缺少表头";
+        return info;
+    }
+
+    const auto hasPassword = headerIndex(info.header, {"password", "pass"}) >= 0;
+    const auto hasUsername = headerIndex(info.header, {"username", "user", "login", "login_username"}) >= 0;
+    const auto hasUrl = headerIndex(info.header, {"url", "website", "origin", "formactionorigin"}) >= 0;
+    const auto hasTitle = headerIndex(info.header, {"title"}) >= 0;
+    const auto hasName = headerIndex(info.header, {"name"}) >= 0;
+    const auto hasGroup = headerIndex(info.header, {"group"}) >= 0;
+    info.hasCategoryLikeColumn = headerIndex(info.header, {"category", "folder", "group"}) >= 0;
+
+    if (hasGroup && hasTitle && hasUsername && hasPassword && hasUrl) {
+        info.format = PasswordCsvFormat::KeePassXC;
+    } else if (hasName && hasUsername && hasPassword && hasUrl) {
+        info.format = PasswordCsvFormat::Chrome;
+    } else if (hasTitle && hasPassword) {
+        info.format = PasswordCsvFormat::Toolbox;
+    } else {
+        info.format = PasswordCsvFormat::Unknown;
+    }
+
+    return info;
+}
+
 PasswordCsvParseResult parsePasswordCsv(const QByteArray &csvData, qint64 defaultGroupId)
 {
     PasswordCsvParseResult result;
@@ -263,4 +310,3 @@ QByteArray exportPasswordCsv(const QVector<PasswordEntrySecrets> &entries)
     static const QByteArray bom("\xEF\xBB\xBF");
     return bom + out.toUtf8();
 }
-

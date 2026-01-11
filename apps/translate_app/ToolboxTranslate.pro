@@ -1,6 +1,6 @@
 QT += core gui widgets network sql
 
-CONFIG += c++17
+CONFIG += c++17 utf8_source
 
 TEMPLATE = app
 TARGET = ToolboxTranslate
@@ -35,4 +35,3 @@ HEADERS += \
     ../../src/translate/translateservice.h \
     ../../src/translate/translationhistorymodel.h \
     ../../src/pages/translatorpage.h
-

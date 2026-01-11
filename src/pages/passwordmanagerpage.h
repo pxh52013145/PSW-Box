@@ -42,6 +42,8 @@ private:
     void lockVault();
     void changeMasterPassword();
     void showHealthReport();
+    void showWebAssistant();
+    void showGraph();
 
     void addGroup();
     void renameSelectedGroup();
@@ -74,9 +76,12 @@ private:
     QPushButton *importCsvBtn_ = nullptr;
     QPushButton *exportCsvBtn_ = nullptr;
     QPushButton *healthBtn_ = nullptr;
+    QPushButton *webAssistantBtn_ = nullptr;
+    QPushButton *graphBtn_ = nullptr;
 
     QLineEdit *searchEdit_ = nullptr;
     QLineEdit *tagFilterEdit_ = nullptr;
+    QComboBox *typeCombo_ = nullptr;
     QComboBox *categoryCombo_ = nullptr;
     QToolButton *groupAddBtn_ = nullptr;
     QToolButton *groupRenameBtn_ = nullptr;

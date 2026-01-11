@@ -1,6 +1,19 @@
 QT += core gui widgets network sql
 
-CONFIG += c++17
+qtHaveModule(webenginewidgets): qtHaveModule(webchannel): qtHaveModule(positioning) {
+    QT += webenginewidgets webchannel
+    DEFINES += TBX_HAS_WEBENGINE
+
+    SOURCES += \
+        ../../src/pages/passwordwebassistantdialog.cpp
+
+    HEADERS += \
+        ../../src/pages/passwordwebassistantdialog.h
+} else {
+    message("Qt WebEngine/WebChannel/Positioning not found: Web Assistant disabled")
+}
+
+CONFIG += c++17 utf8_source
 
 TEMPLATE = app
 TARGET = ToolboxPassword
@@ -25,12 +38,17 @@ SOURCES += \
     ../../src/password/passwordcsvimportworker.cpp \
     ../../src/password/passwordgenerator.cpp \
     ../../src/password/passwordstrength.cpp \
+    ../../src/password/passwordurl.cpp \
+    ../../src/password/passwordgraph.cpp \
+    ../../src/password/passwordwebloginmatcher.cpp \
     ../../src/password/passwordfaviconservice.cpp \
     ../../src/password/passwordhealthworker.cpp \
     ../../src/password/passwordhealthmodel.cpp \
     ../../src/password/passwordgroupmodel.cpp \
     ../../src/pages/passwordmanagerpage.cpp \
+    ../../src/pages/passwordcsvimportdialog.cpp \
     ../../src/pages/passwordentrydialog.cpp \
+    ../../src/pages/passwordgraphdialog.cpp \
     ../../src/pages/passwordgeneratordialog.cpp \
     ../../src/pages/passwordhealthdialog.cpp
 
@@ -47,6 +65,9 @@ HEADERS += \
     ../../src/password/passwordcsvimportworker.h \
     ../../src/password/passwordgenerator.h \
     ../../src/password/passwordstrength.h \
+    ../../src/password/passwordurl.h \
+    ../../src/password/passwordgraph.h \
+    ../../src/password/passwordwebloginmatcher.h \
     ../../src/password/passwordfaviconservice.h \
     ../../src/password/passwordhealth.h \
     ../../src/password/passwordhealthworker.h \
@@ -56,6 +77,8 @@ HEADERS += \
     ../../src/password/passwordentrymodel.h \
     ../../src/password/passwordgroupmodel.h \
     ../../src/pages/passwordmanagerpage.h \
+    ../../src/pages/passwordcsvimportdialog.h \
     ../../src/pages/passwordentrydialog.h \
+    ../../src/pages/passwordgraphdialog.h \
     ../../src/pages/passwordgeneratordialog.h \
     ../../src/pages/passwordhealthdialog.h
