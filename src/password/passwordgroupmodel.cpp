@@ -1,5 +1,8 @@
 #include "passwordgroupmodel.h"
 
+#include <QApplication>
+#include <QStyle>
+
 #include <algorithm>
 
 struct PasswordGroupModel::Node final
@@ -89,6 +92,9 @@ QVariant PasswordGroupModel::data(const QModelIndex &index, int role) const
 
     if (role == Qt::DisplayRole)
         return node->group.name;
+
+    if (role == Qt::DecorationRole)
+        return QApplication::style()->standardIcon(QStyle::SP_DirIcon);
 
     if (role == GroupIdRole)
         return node->group.id;

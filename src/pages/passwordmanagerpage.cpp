@@ -23,6 +23,7 @@
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QEvent>
+#include <QFrame>
 #include <QFile>
 #include <QFileDialog>
 #include <QFormLayout>
@@ -42,6 +43,7 @@
 #include <QPushButton>
 #include <QSaveFile>
 #include <QSortFilterProxyModel>
+#include <QStyle>
 #include <QSplitter>
 #include <QSet>
 #include <QTableView>
@@ -255,39 +257,107 @@ bool PasswordManagerPage::eventFilter(QObject *watched, QEvent *event)
 void PasswordManagerPage::setupUi()
 {
     auto *root = new QVBoxLayout(this);
+    root->setContentsMargins(12, 12, 12, 12);
+    root->setSpacing(10);
 
-    auto *topRow = new QHBoxLayout();
-    statusLabel_ = new QLabel(this);
+    auto stdIcon = [this](QStyle::StandardPixmap p) { return style()->standardIcon(p); };
+
+    auto styleToolPushButton = [](QPushButton *btn) {
+        btn->setProperty("variant", "tool");
+        btn->setCursor(Qt::PointingHandCursor);
+        btn->setIconSize(QSize(16, 16));
+        btn->setMinimumHeight(30);
+    };
+
+    auto styleToolToolButton = [](QToolButton *btn, const char *variant) {
+        btn->setProperty("variant", variant);
+        btn->setCursor(Qt::PointingHandCursor);
+        btn->setIconSize(QSize(16, 16));
+    };
+
+    auto makeVSeparator = [](QWidget *parent) {
+        auto *sep = new QFrame(parent);
+        sep->setFrameShape(QFrame::VLine);
+        sep->setFrameShadow(QFrame::Plain);
+        sep->setProperty("variant", "separator");
+        return sep;
+    };
+
+    // Top bar
+    auto *topBar = new QWidget(this);
+    topBar->setObjectName("topBar");
+    auto *topRow = new QHBoxLayout(topBar);
+    topRow->setContentsMargins(10, 8, 10, 8);
+    topRow->setSpacing(8);
+
+    statusLabel_ = new QLabel(topBar);
+    statusLabel_->setObjectName("statusLabel");
     topRow->addWidget(statusLabel_);
     topRow->addStretch(1);
 
-    createBtn_ = new QPushButton("设置主密码", this);
-    unlockBtn_ = new QPushButton("解锁", this);
-    lockBtn_ = new QPushButton("锁定", this);
-    changePwdBtn_ = new QPushButton("修改主密码", this);
-    importBtn_ = new QPushButton("导入备份", this);
-    exportBtn_ = new QPushButton("导出备份", this);
-    importCsvBtn_ = new QPushButton("导入 CSV", this);
-    exportCsvBtn_ = new QPushButton("导出 CSV", this);
-    healthBtn_ = new QPushButton("安全报告", this);
-    webAssistantBtn_ = new QPushButton("Web 助手", this);
-    graphBtn_ = new QPushButton("图谱", this);
-    commonPwdBtn_ = new QPushButton("常用密码", this);
+    createBtn_ = new QPushButton("设置主密码", topBar);
+    createBtn_->setIcon(stdIcon(QStyle::SP_FileDialogNewFolder));
+    styleToolPushButton(createBtn_);
+
+    unlockBtn_ = new QPushButton("解锁", topBar);
+    unlockBtn_->setIcon(stdIcon(QStyle::SP_DialogOpenButton));
+    styleToolPushButton(unlockBtn_);
+
+    lockBtn_ = new QPushButton("锁定", topBar);
+    lockBtn_->setIcon(stdIcon(QStyle::SP_DialogCloseButton));
+    styleToolPushButton(lockBtn_);
+
+    changePwdBtn_ = new QPushButton("修改主密码", topBar);
+    changePwdBtn_->setIcon(stdIcon(QStyle::SP_BrowserReload));
+    styleToolPushButton(changePwdBtn_);
+
+    importBtn_ = new QPushButton("导入备份", topBar);
+    importBtn_->setIcon(stdIcon(QStyle::SP_DialogOpenButton));
+    styleToolPushButton(importBtn_);
+
+    exportBtn_ = new QPushButton("导出备份", topBar);
+    exportBtn_->setIcon(stdIcon(QStyle::SP_DialogSaveButton));
+    styleToolPushButton(exportBtn_);
+
+    importCsvBtn_ = new QPushButton("导入 CSV", topBar);
+    importCsvBtn_->setIcon(stdIcon(QStyle::SP_DialogOpenButton));
+    styleToolPushButton(importCsvBtn_);
+
+    exportCsvBtn_ = new QPushButton("导出 CSV", topBar);
+    exportCsvBtn_->setIcon(stdIcon(QStyle::SP_DialogSaveButton));
+    styleToolPushButton(exportCsvBtn_);
+
+    healthBtn_ = new QPushButton("安全报告", topBar);
+    healthBtn_->setIcon(stdIcon(QStyle::SP_MessageBoxInformation));
+    styleToolPushButton(healthBtn_);
+
+    webAssistantBtn_ = new QPushButton("Web 助手", topBar);
+    webAssistantBtn_->setIcon(stdIcon(QStyle::SP_DriveNetIcon));
+    styleToolPushButton(webAssistantBtn_);
+
+    graphBtn_ = new QPushButton("图谱", topBar);
+    graphBtn_->setIcon(stdIcon(QStyle::SP_ComputerIcon));
+    styleToolPushButton(graphBtn_);
+
+    commonPwdBtn_ = new QPushButton("常用密码", topBar);
+    commonPwdBtn_->setIcon(stdIcon(QStyle::SP_DialogHelpButton));
+    styleToolPushButton(commonPwdBtn_);
 
     topRow->addWidget(createBtn_);
     topRow->addWidget(unlockBtn_);
     topRow->addWidget(lockBtn_);
     topRow->addWidget(changePwdBtn_);
-    topRow->addSpacing(12);
+    topRow->addWidget(makeVSeparator(topBar));
     topRow->addWidget(importBtn_);
     topRow->addWidget(exportBtn_);
     topRow->addWidget(importCsvBtn_);
     topRow->addWidget(exportCsvBtn_);
+    topRow->addWidget(makeVSeparator(topBar));
     topRow->addWidget(healthBtn_);
     topRow->addWidget(webAssistantBtn_);
     topRow->addWidget(graphBtn_);
     topRow->addWidget(commonPwdBtn_);
-    root->addLayout(topRow);
+    root->addWidget(topBar);
 
 #ifndef TBX_HAS_WEBENGINE
     if (webAssistantBtn_) {
@@ -296,14 +366,25 @@ void PasswordManagerPage::setupUi()
     }
 #endif
 
-    auto *filterRow = new QHBoxLayout();
-    searchEdit_ = new QLineEdit(this);
+    // Filter bar
+    auto *filterBar = new QWidget(this);
+    filterBar->setObjectName("filterBar");
+    auto *filterRow = new QHBoxLayout(filterBar);
+    filterRow->setContentsMargins(10, 8, 10, 8);
+    filterRow->setSpacing(8);
+
+    searchEdit_ = new QLineEdit(filterBar);
+    searchEdit_->setClearButtonEnabled(true);
     searchEdit_->setPlaceholderText("搜索标题/账号/网址/类型/分类/标签…");
+    searchEdit_->addAction(stdIcon(QStyle::SP_FileDialogContentsView), QLineEdit::LeadingPosition);
 
-    tagFilterEdit_ = new QLineEdit(this);
+    tagFilterEdit_ = new QLineEdit(filterBar);
+    tagFilterEdit_->setClearButtonEnabled(true);
+    tagFilterEdit_->setFixedWidth(260);
     tagFilterEdit_->setPlaceholderText("标签（逗号分隔）");
+    tagFilterEdit_->addAction(stdIcon(QStyle::SP_FileDialogDetailedView), QLineEdit::LeadingPosition);
 
-    typeCombo_ = new QComboBox(this);
+    typeCombo_ = new QComboBox(filterBar);
     typeCombo_->addItem("全部", -1);
     typeCombo_->addItem(passwordEntryTypeLabel(PasswordEntryType::WebLogin), static_cast<int>(PasswordEntryType::WebLogin));
     typeCombo_->addItem(passwordEntryTypeLabel(PasswordEntryType::DesktopClient),
@@ -313,40 +394,64 @@ void PasswordManagerPage::setupUi()
                         static_cast<int>(PasswordEntryType::DatabaseCredential));
     typeCombo_->addItem(passwordEntryTypeLabel(PasswordEntryType::ServerSsh), static_cast<int>(PasswordEntryType::ServerSsh));
     typeCombo_->addItem(passwordEntryTypeLabel(PasswordEntryType::DeviceWifi), static_cast<int>(PasswordEntryType::DeviceWifi));
+    typeCombo_->setFixedWidth(160);
 
-    categoryCombo_ = new QComboBox(this);
+    categoryCombo_ = new QComboBox(filterBar);
     categoryCombo_->addItem("全部");
     categoryCombo_->addItem("未分类");
+    categoryCombo_->setFixedWidth(160);
 
-    filterRow->addWidget(new QLabel("搜索：", this));
+    filterRow->addWidget(new QLabel("搜索：", filterBar));
     filterRow->addWidget(searchEdit_, 1);
-    filterRow->addSpacing(12);
-    filterRow->addWidget(new QLabel("标签：", this));
+    filterRow->addWidget(new QLabel("标签：", filterBar));
     filterRow->addWidget(tagFilterEdit_);
-    filterRow->addSpacing(12);
-    filterRow->addWidget(new QLabel("类型：", this));
+    filterRow->addWidget(new QLabel("类型：", filterBar));
     filterRow->addWidget(typeCombo_);
-    filterRow->addSpacing(12);
-    filterRow->addWidget(new QLabel("分类：", this));
+    filterRow->addWidget(new QLabel("分类：", filterBar));
     filterRow->addWidget(categoryCombo_);
-    root->addLayout(filterRow);
+    root->addWidget(filterBar);
 
-    auto *splitter = new QSplitter(Qt::Horizontal, this);
+    // Content
+    auto *contentFrame = new QWidget(this);
+    contentFrame->setObjectName("contentFrame");
+    auto *contentLayout = new QVBoxLayout(contentFrame);
+    contentLayout->setContentsMargins(0, 0, 0, 0);
+    contentLayout->setSpacing(0);
+
+    auto *splitter = new QSplitter(Qt::Horizontal, contentFrame);
+    splitter->setChildrenCollapsible(false);
+    splitter->setHandleWidth(1);
 
     auto *groupPanel = new QWidget(splitter);
+    groupPanel->setObjectName("groupPanel");
     auto *groupLayout = new QVBoxLayout(groupPanel);
-    groupLayout->setContentsMargins(0, 0, 0, 0);
+    groupLayout->setContentsMargins(10, 10, 10, 10);
+    groupLayout->setSpacing(8);
 
     auto *groupToolbar = new QHBoxLayout();
-    groupToolbar->addWidget(new QLabel("分组", groupPanel));
+    auto *groupTitle = new QLabel("分组", groupPanel);
+    groupTitle->setProperty("role", "sectionTitle");
+    groupToolbar->addWidget(groupTitle);
     groupToolbar->addStretch(1);
 
     groupAddBtn_ = new QToolButton(groupPanel);
-    groupAddBtn_->setText("新建");
+    groupAddBtn_->setIcon(stdIcon(QStyle::SP_FileDialogNewFolder));
+    groupAddBtn_->setToolTip("新建分组");
+    groupAddBtn_->setAutoRaise(true);
+    groupAddBtn_->setToolButtonStyle(Qt::ToolButtonIconOnly);
+    styleToolToolButton(groupAddBtn_, "icon");
     groupRenameBtn_ = new QToolButton(groupPanel);
-    groupRenameBtn_->setText("重命名");
+    groupRenameBtn_->setIcon(stdIcon(QStyle::SP_FileDialogDetailedView));
+    groupRenameBtn_->setToolTip("重命名分组");
+    groupRenameBtn_->setAutoRaise(true);
+    groupRenameBtn_->setToolButtonStyle(Qt::ToolButtonIconOnly);
+    styleToolToolButton(groupRenameBtn_, "icon");
     groupDeleteBtn_ = new QToolButton(groupPanel);
-    groupDeleteBtn_->setText("删除");
+    groupDeleteBtn_->setIcon(stdIcon(QStyle::SP_TrashIcon));
+    groupDeleteBtn_->setToolTip("删除分组");
+    groupDeleteBtn_->setAutoRaise(true);
+    groupDeleteBtn_->setToolButtonStyle(Qt::ToolButtonIconOnly);
+    styleToolToolButton(groupDeleteBtn_, "icon");
     groupToolbar->addWidget(groupAddBtn_);
     groupToolbar->addWidget(groupRenameBtn_);
     groupToolbar->addWidget(groupDeleteBtn_);
@@ -357,47 +462,108 @@ void PasswordManagerPage::setupUi()
     groupView_->setHeaderHidden(true);
     groupView_->setEditTriggers(QAbstractItemView::NoEditTriggers);
     groupView_->setUniformRowHeights(true);
+    groupView_->setIconSize(QSize(16, 16));
+    groupView_->setFrameShape(QFrame::NoFrame);
+    groupView_->setIndentation(14);
     groupLayout->addWidget(groupView_, 1);
 
-    groupPanel->setMinimumWidth(220);
+    groupPanel->setMinimumWidth(240);
     splitter->addWidget(groupPanel);
 
-    tableView_ = new QTableView(splitter);
+    auto *tablePanel = new QWidget(splitter);
+    tablePanel->setObjectName("tablePanel");
+    auto *tableLayout = new QVBoxLayout(tablePanel);
+    tableLayout->setContentsMargins(0, 0, 0, 0);
+    tableLayout->setSpacing(0);
+
+    tableView_ = new QTableView(tablePanel);
+    tableView_->setObjectName("entryTable");
     tableView_->setModel(proxy_);
     tableView_->setSelectionBehavior(QAbstractItemView::SelectRows);
     tableView_->setSelectionMode(QAbstractItemView::SingleSelection);
+    tableView_->setEditTriggers(QAbstractItemView::NoEditTriggers);
     tableView_->setSortingEnabled(true);
     tableView_->setIconSize(QSize(16, 16));
-    tableView_->horizontalHeader()->setStretchLastSection(true);
+    tableView_->setAlternatingRowColors(true);
+    tableView_->setShowGrid(false);
+    tableView_->setFrameShape(QFrame::NoFrame);
     tableView_->verticalHeader()->setVisible(false);
     tableView_->setWordWrap(false);
-    splitter->addWidget(tableView_);
+
+    auto *header = tableView_->horizontalHeader();
+    header->setHighlightSections(false);
+    header->setStretchLastSection(false);
+    header->setSectionResizeMode(QHeaderView::Interactive);
+    header->setSectionResizeMode(0, QHeaderView::Stretch);
+    header->resizeSection(1, 160);
+    header->resizeSection(2, 260);
+    header->resizeSection(3, 120);
+    header->resizeSection(4, 180);
+    header->resizeSection(5, 110);
+
+    tableView_->verticalHeader()->setDefaultSectionSize(32);
+    tableLayout->addWidget(tableView_, 1);
+    splitter->addWidget(tablePanel);
 
     splitter->setStretchFactor(0, 0);
     splitter->setStretchFactor(1, 1);
-    root->addWidget(splitter, 1);
 
-    auto *actionRow = new QHBoxLayout();
-    addBtn_ = new QPushButton("新增", this);
-    editBtn_ = new QPushButton("编辑", this);
-    deleteBtn_ = new QPushButton("删除", this);
-    moveBtn_ = new QPushButton("移动分组", this);
-    copyUserBtn_ = new QPushButton("复制账号", this);
-    copyPwdBtn_ = new QPushButton("复制密码", this);
+    contentLayout->addWidget(splitter, 1);
+    root->addWidget(contentFrame, 1);
+
+    // Bottom bar
+    auto *bottomBar = new QWidget(this);
+    bottomBar->setObjectName("bottomBar");
+    auto *actionRow = new QHBoxLayout(bottomBar);
+    actionRow->setContentsMargins(10, 8, 10, 8);
+    actionRow->setSpacing(8);
+
+    addBtn_ = new QPushButton("新增", bottomBar);
+    addBtn_->setIcon(stdIcon(QStyle::SP_FileDialogNewFolder));
+    styleToolPushButton(addBtn_);
+
+    editBtn_ = new QPushButton("编辑", bottomBar);
+    editBtn_->setIcon(stdIcon(QStyle::SP_FileDialogDetailedView));
+    styleToolPushButton(editBtn_);
+
+    deleteBtn_ = new QPushButton("删除", bottomBar);
+    deleteBtn_->setIcon(stdIcon(QStyle::SP_TrashIcon));
+    styleToolPushButton(deleteBtn_);
+
+    moveBtn_ = new QPushButton("移动分组", bottomBar);
+    moveBtn_->setIcon(stdIcon(QStyle::SP_ArrowRight));
+    styleToolPushButton(moveBtn_);
+
+    copyUserBtn_ = new QPushButton("复制账号", bottomBar);
+    copyUserBtn_->setIcon(stdIcon(QStyle::SP_FileDialogContentsView));
+    styleToolPushButton(copyUserBtn_);
+
+    copyPwdBtn_ = new QPushButton("复制密码", bottomBar);
+    copyPwdBtn_->setIcon(stdIcon(QStyle::SP_FileDialogContentsView));
+    styleToolPushButton(copyPwdBtn_);
 
     actionRow->addWidget(addBtn_);
     actionRow->addWidget(editBtn_);
     actionRow->addWidget(deleteBtn_);
     actionRow->addWidget(moveBtn_);
-    actionRow->addSpacing(12);
+    actionRow->addWidget(makeVSeparator(bottomBar));
     actionRow->addWidget(copyUserBtn_);
     actionRow->addWidget(copyPwdBtn_);
     actionRow->addStretch(1);
-    root->addLayout(actionRow);
+    root->addWidget(bottomBar);
 
-    hintLabel_ = new QLabel(this);
-    hintLabel_->setText("提示：复制密码后会在 15 秒后自动清空剪贴板；解锁状态 5 分钟无操作会自动锁定。");
-    root->addWidget(hintLabel_);
+    auto *hintBar = new QWidget(this);
+    hintBar->setObjectName("hintBar");
+    auto *hintRow = new QHBoxLayout(hintBar);
+    hintRow->setContentsMargins(10, 6, 10, 6);
+    hintRow->setSpacing(8);
+
+    hintLabel_ = new QLabel(hintBar);
+    hintLabel_->setProperty("role", "hintText");
+    hintLabel_->setText("提示：复制密码后 15 秒后自动清空剪贴板；解锁后 5 分钟无操作会自动锁定。");
+    hintLabel_->setWordWrap(true);
+    hintRow->addWidget(hintLabel_, 1);
+    root->addWidget(hintBar);
 }
 
 void PasswordManagerPage::wireSignals()
@@ -574,11 +740,20 @@ void PasswordManagerPage::updateUiState()
         faviconService_->setNetworkEnabled(unlocked);
 
     if (!initialized) {
-        statusLabel_->setText("状态：未初始化（请先设置主密码）");
+        statusLabel_->setText("状态：● 未初始化（请先设置主密码）");
+        statusLabel_->setProperty("state", "uninitialized");
     } else if (unlocked) {
-        statusLabel_->setText("状态：已解锁");
+        statusLabel_->setText("状态：● 已解锁");
+        statusLabel_->setProperty("state", "unlocked");
     } else {
-        statusLabel_->setText("状态：已锁定");
+        statusLabel_->setText("状态：● 已锁定");
+        statusLabel_->setProperty("state", "locked");
+    }
+
+    if (statusLabel_) {
+        statusLabel_->style()->unpolish(statusLabel_);
+        statusLabel_->style()->polish(statusLabel_);
+        statusLabel_->update();
     }
 
     createBtn_->setEnabled(!initialized);
