@@ -4,7 +4,20 @@
 
 #include <QApplication>
 #include <QCoreApplication>
+#include <QFile>
 #include <QMessageBox>
+
+static void applyPasswordTheme(QApplication &app)
+{
+    QApplication::setStyle("Fusion");
+
+    QFile qssFile(":/tbx/themes/password_dark.qss");
+    if (!qssFile.open(QIODevice::ReadOnly | QIODevice::Text))
+        return;
+
+    const auto qss = QString::fromUtf8(qssFile.readAll());
+    app.setStyleSheet(qss);
+}
 
 int main(int argc, char *argv[])
 {
@@ -12,6 +25,7 @@ int main(int argc, char *argv[])
     QCoreApplication::setApplicationName("ToolboxPassword");
 
     QApplication app(argc, argv);
+    applyPasswordTheme(app);
 
     SingleInstance instance("CourseDesign.Toolbox.Password");
     if (!instance.tryRunAsPrimary()) {

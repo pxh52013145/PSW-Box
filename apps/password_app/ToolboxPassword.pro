@@ -84,3 +84,6 @@ HEADERS += \
     ../../src/pages/passwordgraphdialog.h \
     ../../src/pages/passwordgeneratordialog.h \
     ../../src/pages/passwordhealthdialog.h
+
+RESOURCES += \
+    ../../src/resources/password_resources.qrc
