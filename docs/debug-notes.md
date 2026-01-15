@@ -1,10 +1,10 @@
 # 调试记录（Debug Notes）
 
-## 1) Qt Creator 编译报错：Cannot find file: ...ToolboxLauncher.pro
+## 1) Qt Creator 编译报错：Cannot find file: ...ToolboxPassword.pro
 
 **现象**
 - Qt Creator 构建 `Toolbox.pro`（`TEMPLATE = subdirs`）时，`mingw32-make` 输出类似：
-  - `Cannot find file: C:\Users\...\Desktop\QT???\Final\Toolbox\apps\launcher\ToolboxLauncher.pro.`
+  - `Cannot find file: C:\Users\...\Desktop\QT???\Final\Toolbox\apps\password_app\ToolboxPassword.pro.`
   - 随后 `Error 2` 中断。
 
 **复现条件**
