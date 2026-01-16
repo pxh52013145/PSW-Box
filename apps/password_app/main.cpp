@@ -5,11 +5,16 @@
 #include <QApplication>
 #include <QCoreApplication>
 #include <QFile>
+#include <QIcon>
 #include <QMessageBox>
 
 static void applyPasswordTheme(QApplication &app)
 {
     QApplication::setStyle("Fusion");
+
+    const QIcon appIcon(":/tbx/icons/icon.png");
+    if (!appIcon.isNull())
+        app.setWindowIcon(appIcon);
 
     QFile qssFile(":/tbx/themes/password_dark.qss");
     if (!qssFile.open(QIODevice::ReadOnly | QIODevice::Text))
